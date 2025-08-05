@@ -13,7 +13,7 @@ tags:
 <p align="center">
   <a href="https://gpt-oss.com"><strong>Try gpt-oss</strong></a> ·
   <a href="https://cookbook.openai.com/topic/gpt-oss"><strong>Guides</strong></a> ·
-  <a href="https://openai.com/index/gpt-oss-model-card"><strong>System card</strong></a> ·
+  <a href="https://openai.com/index/gpt-oss-model-card"><strong>Model card</strong></a> ·
   <a href="https://openai.com/index/introducing-gpt-oss/"><strong>OpenAI blog</strong></a>
 </p>
 
@@ -21,8 +21,8 @@ tags:
 
 Welcome to the gpt-oss series, [OpenAI’s open-weight models](https://openai.com/open-models) designed for powerful reasoning, agentic tasks, and versatile developer use cases.
 
-We’re releasing two flavors of the open models:
-- `gpt-oss-120b` — for production, general purpose, high reasoning use cases that fits into a single H100 GPU (117B parameters with 5.1B active parameters)
+We’re releasing two flavors of these open models:
+- `gpt-oss-120b` — for production, general purpose, high reasoning use cases that fit into a single H100 GPU (117B parameters with 5.1B active parameters)
 - `gpt-oss-20b` — for lower latency, and local or specialized use cases (21B parameters with 3.6B active parameters)
 
 Both models were trained on our [harmony response format](https://github.com/openai/harmony) and should only be used with the harmony format as it will not work correctly otherwise.
