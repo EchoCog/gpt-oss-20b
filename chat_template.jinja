@@ -117,14 +117,15 @@
         {%- set tool = tool.function %}
         {{- "// " + tool.description + "
 " }}
-        {{- "type "+ tool.name + " = (" }}
-        {%- if tool.parameters and tool.parameters.properties -%}
-            {{- "_: " }}
-            {{- "{
+        {{- "type "+ tool.name + " = " }}
+        {%- if tool.parameters and tool.parameters.properties %}
+            {{- "(_: {
 " }}
             {%- for param_name, param_spec in tool.parameters.properties.items() %}
-                {{- "// " + param_spec.description + "
+                {%- if param_spec.description %}
+                    {{- "// " + param_spec.description + "
 " }}
+                {%- endif %}
                 {{- param_name }}
                 {%- if param_name not in (tool.parameters.required or []) -%}
                     {{- "?" }}
@@ -132,7 +133,9 @@
                 {{- ": " }}
                 {{- render_typescript_type(param_spec, tool.parameters.required or []) }}
                 {%- if param_spec.default is defined -%}
-                    {%- if param_spec.oneOf %}
+                    {%- if param_spec.enum %}
+                        {{- ", // default: " + param_spec.default }}
+                    {%- elif param_spec.oneOf %}
                         {{- "// default: " + param_spec.default }}
                     {%- else %}
                         {{- ", // default: " + param_spec.default|tojson }}
@@ -141,19 +144,21 @@
                 {%- if not loop.last %}
                     {{- ",
 " }}
+                {%- else %}
+                    {{- "
+" }}
                 {%- endif -%}
             {%- endfor %}
-            {{- ",
-}) => any;
+            {{- "}) => any;
+
 " }}
         {%- else -%}
-            {{- "
-}) => any;
+            {{- "() => any;
+
 " }}
         {%- endif -%}
     {%- endfor %}
-    {{- "
-} // namespace " + namespace_name }}
+    {{- "} // namespace " + namespace_name }}
 {%- endmacro -%}
 
 {%- macro render_builtin_tools(browser_tool, python_tool) -%}
@@ -279,9 +284,11 @@
         {%- endfor %}
         {{- render_builtin_tools(available_builtin_tools.browser, available_builtin_tools.python) }}
     {%- endif -%}
-    {{- "# Valid channels: analysis, commentary, final. Channel must be included for every message.
-" }}
-    {{- "Calls to these tools must go to the commentary channel: 'functions'." }}
+    {{- "# Valid channels: analysis, commentary, final. Channel must be included for every message." }}
+    {%- if tools -%}
+        {{- "
+Calls to these tools must go to the commentary channel: 'functions'." }}
+    {%- endif -%}
 {%- endmacro -%}
 
 {#- Main Template Logic ================================================= #}
@@ -353,9 +360,10 @@
                 {{- "<|start|>assistant<|channel|>analysis<|message|>" + message.thinking + "<|end|>" }}
             {%- endif %}
             {{- "<|start|>assistant to=" }}
-            {{- "functions." + tool_call.name + "<|channel|>commentary json<|message|>" }}
+            {{- "functions." + tool_call.name + "<|channel|>commentary " }}
+            {{- (tool_call.content_type if tool_call.content_type is defined else "json") + "<|message|>" }}
             {{- tool_call.arguments|tojson }}
-            {{- "<|end|>" }}
+            {{- "<|call|>" }}
             {%- set last_tool_call.name = tool_call.name %}
         {%- elif loop.last and not add_generation_prompt %}
             {#- Only render the CoT if the final turn is an assistant turn and add_generation_prompt is false #}
