@@ -1,6 +1,6 @@
 ---
 license: apache-2.0
-pipeline_tag: text-generation
+pipeline_tag: image-text-to-text
 library_name: transformers
 tags:
 - vllm
