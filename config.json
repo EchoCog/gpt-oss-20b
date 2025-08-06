@@ -54,7 +54,7 @@
       "model.embed_tokens",
       "lm_head"
     ],
-    "quant_method": "mxfp4"
+    "quant_method": "gptq"
   },
   "rms_norm_eps": 1e-05,
   "rope_scaling": {
