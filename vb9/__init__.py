@@ -5,9 +5,4 @@ loop described in the conceptual docs. Intentionally minimal & pure-Python; no
 external deps.
 """
 
-__all__ = [
-    "styx",
-    "sexp",
-    "glyph",
-    "ide",
-]
+__all__ = ["styx", "sexp", "glyph", "ide", "logic", "spi"]

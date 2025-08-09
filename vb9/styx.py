@@ -21,6 +21,7 @@ _lock = Lock()
 _msg_queue: "Queue[str]" = Queue()
 
 def _norm(path: str) -> str:
+    """Normalize a filesystem-like path."""
     if not path.startswith("/"):
         path = "/" + path
     while "//" in path:
@@ -44,7 +45,8 @@ def exists(path: str) -> bool:
     return tread(path) is not None
 
 def mount(src: str, mountpoint: str) -> None:
-    src = _norm(src); mountpoint = _norm(mountpoint)
+    src = _norm(src)
+    mountpoint = _norm(mountpoint)
     with _lock:
         _mounts[mountpoint] = src
 
