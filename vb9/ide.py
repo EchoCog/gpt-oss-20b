@@ -13,6 +13,7 @@ import hashlib
 from typing import Any, Optional, Dict, List
 
 from . import styx, sexp, glyph, logic
+from .gestures import Routine
 
 
 class VB9IDE:
@@ -75,6 +76,18 @@ class VB9IDE:
         ).encode()
         return hashlib.blake2b(data, digest_size=16).hexdigest()
 
+    def _load_routine_index(self) -> Dict[str, Any]:
+        raw = styx.tread("/routines/index.json")
+        if isinstance(raw, str):
+            try:
+                return json.loads(raw)
+            except Exception:  # pragma: no cover - corrupt index
+                return {"routines": []}
+        return {"routines": []}
+
+    def _save_routine_index(self, index: Dict[str, Any]) -> None:
+        styx.twrite("/routines/index.json", json.dumps(index, indent=2))
+
     def compiler(self, expr: Any):  # type: ignore[override]
         symbols = glyph.extract_glyphs(expr)
         prev_manifest_raw = styx.tread("/form/manifest.json")
@@ -105,12 +118,35 @@ class VB9IDE:
             meta["changed"] = changed
             kernels.append(meta)
         proof = self._proof_tree(expr)
+        proof_hash = self._hash_proof_tree(proof)
         manifest = {
             "kernels": kernels,
             "proof_tree": proof,
-            "proof_hash": self._hash_proof_tree(proof),
+            "proof_hash": proof_hash,
         }
         styx.twrite("/form/manifest.json", json.dumps(manifest, indent=2))
+        # Routine provenance: capture canonical textual form & link
+        # to proof hash
+        routine_index = self._load_routine_index()
+        form_src = styx.tread("/form/source.scm")
+        if isinstance(form_src, str):
+            routine = Routine.from_form(form_src, proof_hash=proof_hash)
+            # collect layer hashes placeholder (future hyperglyph integration)
+            entry = {
+                "routine_hash": routine.hash,
+                "proof_hash": proof_hash,
+                "context": routine.context,
+                "form": routine.form,
+                "layers": [],
+            }
+            # ensure uniqueness by routine_hash
+            routines = routine_index.get("routines", [])
+            if not any(
+                r.get("routine_hash") == routine.hash for r in routines
+            ):
+                routines.append(entry)
+                routine_index["routines"] = routines
+                self._save_routine_index(routine_index)
         return kernels
 
     def _runtime_loop(self):  # pragma: no cover - timing dependent
