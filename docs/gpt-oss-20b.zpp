@@ -1,0 +1,147 @@
+// GPT-OSS 20B Z++ Specification (topology, routing, precision)
+
+[ TOKEN, POSITION, EXPERT, BYTE, BLOCK ]
+
+N_LAYERS == 24
+VOCAB_SIZE == 201088
+H_RESID == 2880
+NUM_HEADS_Q == 64
+NUM_HEADS_KV == 8
+HEAD_DIM == 64
+H_ATTN == NUM_HEADS_Q * HEAD_DIM
+SLIDING_WINDOW == 128
+MAX_POS == 131072
+ROPE_THETA == 150000
+ROPE_YARN_FACTOR == 32
+ROUTER_TOP_K == 4
+NUM_LOCAL_EXPERTS == 32
+ATTN_DROPOUT == 0.0
+RMS_EPS == 1e-5
+ROUTER_AUX_COEF == 0.9
+TIE_EMBEDDINGS == false
+ATTN_BIAS == true
+
+AttnKind ::= Sliding | Full
+DType ::= BF16 | FP4 | UE8
+
+SpecialTokenId == {
+  START_OF_TEXT: 199998,
+  END_OF_TEXT: 199999,
+  RETURN: 200002,
+  CONSTRAIN: 200003,
+  CHANNEL: 200005,
+  START: 200006,
+  END: 200007,
+  MESSAGE: 200008,
+  END_OF_PROMPT: 200018
+}
+
+class RoPE
+{
+  const theta: ℕ; factor: ℕ; max_pos: ℕ
+  inv theta = ROPE_THETA ∧ factor = ROPE_YARN_FACTOR ∧ max_pos = MAX_POS
+
+  rope_embed: POSITION × 1..HEAD_DIM → ℝ × ℝ
+  pre ∀ p: POSITION • p ≤ max_pos
+}
+
+class AttentionLayout
+{
+  const num_layers: ℕ; sliding_window: ℕ
+  inv num_layers = N_LAYERS ∧ sliding_window = SLIDING_WINDOW
+
+  attn_type: 0..(N_LAYERS−1) → AttnKind
+  inv ∀ i: 0..(N_LAYERS−1) •
+        (i mod 2 = 0 ⇒ attn_type i = Sliding) ∧
+        (i mod 2 = 1 ⇒ attn_type i = Full)
+}
+
+class ParameterDTypes
+{
+  is_attn_param, is_embed_param, is_router_param, is_mlp_blocks, is_mlp_scales: STRING → 𝔹
+
+  dtype_of: STRING → DType
+  inv ∀ n: STRING •
+      (is_attn_param n ∨ is_embed_param n ∨ is_router_param n) ⇒ dtype_of n = BF16 ∧
+      (is_mlp_blocks n ⇒ dtype_of n = FP4) ∧
+      (is_mlp_scales n ⇒ dtype_of n = UE8)
+}
+
+class Gating
+{
+  const num_experts: ℕ; top_k: ℕ
+  inv num_experts = NUM_LOCAL_EXPERTS ∧ top_k = ROUTER_TOP_K ∧ top_k < num_experts
+
+  route: TOKEN → ℙ EXPERT
+  score: TOKEN × EXPERT → ℝ
+
+  inv ∀ t: TOKEN • #(route t) = top_k ∧ route t ⊆ EXPERT
+  aux_loss_coef: ℝ
+  inv aux_loss_coef = ROUTER_AUX_COEF
+}
+
+class MoEExperts
+{
+  W1_blocks: EXPERT → BLOCK
+  W1_scales: EXPERT → BYTE
+  W2_blocks: EXPERT → BLOCK
+  W2_scales: EXPERT → BYTE
+
+  fwd_expert: EXPERT × ℝ^H_RESID → ℝ^H_RESID
+}
+
+class AttentionCore
+{
+  q_proj: ℝ^H_RESID → ℝ^H_ATTN
+  k_proj: ℝ^H_RESID → ℝ^(NUM_HEADS_KV * HEAD_DIM)
+  v_proj: ℝ^H_RESID → ℝ^(NUM_HEADS_KV * HEAD_DIM)
+  o_proj: ℝ^H_ATTN → ℝ^H_RESID
+
+  rope: RoPE
+  bias_enabled: 𝔹
+  inv bias_enabled = ATTN_BIAS
+
+  attention_step:
+    AttnKind × POSITION × seq ℝ^H_RESID → ℝ^H_RESID
+  pre ∀ pos • pos ≤ rope.max_pos
+  post
+    (ξ? = Sliding ⇒ only tokens within SLIDING_WINDOW of pos contribute)
+    ∧ (ξ? = Full ⇒ any previous token may contribute)
+}
+
+class TransformerLayer
+{
+  kind: AttnKind
+  attn: AttentionCore
+  router: Gating
+  experts: MoEExperts
+
+  in_rms_scale, post_attn_rms_scale: ℝ^H_RESID
+  inv ∀ i: 1..H_RESID • finite(in_rms_scale[i]) ∧ finite(post_attn_rms_scale[i])
+
+  forward:
+    POSITION × seq ℝ^H_RESID → ℝ^H_RESID
+}
+
+class GPT_OSS_MoE
+{
+  const vocab_size: ℕ; n_layers: ℕ; h_resid: ℕ
+  inv vocab_size = VOCAB_SIZE ∧ n_layers = N_LAYERS ∧ h_resid = H_RESID
+
+  layout: AttentionLayout
+  params: ParameterDTypes
+
+  embed: TOKEN → ℝ^H_RESID
+  unembed: ℝ^H_RESID → ℝ^VOCAB_SIZE
+  inv TIE_EMBEDDINGS = false
+
+  layers: 0..(N_LAYERS−1) → TransformerLayer
+  inv ∀ i • (layers i).kind = layout.attn_type i
+
+  use_cache: 𝔹; attn_dropout: ℝ; rms_eps: ℝ
+  inv use_cache = true ∧ attn_dropout = ATTN_DROPOUT ∧ rms_eps = RMS_EPS
+
+  generate_step:
+    POSITION × seq TOKEN → TOKEN
+  pre length input ≥ 1 ∧ current_pos ≤ MAX_POS
+}
